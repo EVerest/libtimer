@@ -24,7 +24,18 @@ if (NOT DISABLE_EDM)
     # In EDM mode, we can't install exports (because the dependencies usually do not install their exports)
     set(TIMER_INSTALL OFF)
 else()
-    find_package(date REQUIRED)
+    set(EXTERNAL_DATE_NAME date)
+    set(EXTERNAL_DATE_URL https://github.com/HowardHinnant/date.git)
+    set(EXTERNAL_DATE_TAG v3.0.1)
+    # Fetch Date
+    FetchContent_Declare(
+        ${EXTERNAL_DATE_NAME}
+        GIT_REPOSITORY          ${EXTERNAL_DATE_URL}
+        GIT_TAG                 ${EXTERNAL_DATE_TAG}
+    )
+
+    # Find the date package
+    FetchContent_MakeAvailable(${EXTERNAL_DATE_NAME})
 endif()
 
 
