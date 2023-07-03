@@ -6,8 +6,17 @@ project(everest-timer
     LANGUAGES CXX C
 )
 
-find_package(everest-cmake 0.1 REQUIRED
-    PATHS ../everest-cmake
+include(FetchContent)
+
+set(EXTERNAL_EVEREST_CMAKE_NAME everest-cmake)
+set(EXTERNAL_EVEREST_CMAKE_URL https://github.com/EVerest/everest-cmake.git)
+set(EXTERNAL_EVEREST_CMAKE_TAG v0.1.0)
+
+message(STATUS "Fetching everest cmake")
+FetchContent_Declare(
+    ${EXTERNAL_EVEREST_CMAKE_NAME}
+    GIT_REPOSITORY              ${EXTERNAL_EVEREST_CMAKE_URL}
+    GIT_TAG                     ${EXTERNAL_EVEREST_CMAKE_TAG}
 )
 
 # options
