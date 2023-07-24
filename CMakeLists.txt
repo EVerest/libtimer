@@ -6,18 +6,24 @@ project(everest-timer
     LANGUAGES CXX C
 )
 
-include(FetchContent)
 
-set(EXTERNAL_EVEREST_CMAKE_NAME everest-cmake)
-set(EXTERNAL_EVEREST_CMAKE_URL https://github.com/EVerest/everest-cmake.git)
-set(EXTERNAL_EVEREST_CMAKE_TAG v0.1.0)
+if (USE_FIND_PACKAGE)
+    find_package(everest-cmake 0.1 REQUIRED
+        PATHS ../everest-cmake
+else()
+    include(FetchContent)
 
-message(STATUS "Fetching everest cmake")
-FetchContent_Declare(
-    ${EXTERNAL_EVEREST_CMAKE_NAME}
-    GIT_REPOSITORY              ${EXTERNAL_EVEREST_CMAKE_URL}
-    GIT_TAG                     ${EXTERNAL_EVEREST_CMAKE_TAG}
-)
+    set(EXTERNAL_EVEREST_CMAKE_NAME everest-cmake)
+    set(EXTERNAL_EVEREST_CMAKE_URL https://github.com/EVerest/everest-cmake.git)
+    set(EXTERNAL_EVEREST_CMAKE_TAG v0.1.0)
+
+    message(STATUS "Fetching everest cmake")
+    FetchContent_Declare(
+        ${EXTERNAL_EVEREST_CMAKE_NAME}
+        GIT_REPOSITORY              ${EXTERNAL_EVEREST_CMAKE_URL}
+        GIT_TAG                     ${EXTERNAL_EVEREST_CMAKE_TAG}
+    )
+endif()
 
 # options
 option(BUILD_EXAMPLES "Build examples" OFF)
@@ -33,18 +39,22 @@ if (NOT DISABLE_EDM)
     # In EDM mode, we can't install exports (because the dependencies usually do not install their exports)
     set(TIMER_INSTALL OFF)
 else()
-    set(EXTERNAL_DATE_NAME date)
-    set(EXTERNAL_DATE_URL https://github.com/HowardHinnant/date.git)
-    set(EXTERNAL_DATE_TAG v3.0.1)
-    # Fetch Date
-    FetchContent_Declare(
-        ${EXTERNAL_DATE_NAME}
-        GIT_REPOSITORY          ${EXTERNAL_DATE_URL}
-        GIT_TAG                 ${EXTERNAL_DATE_TAG}
-    )
+    if (USE_FIND_PACKAGE)
+        find_package(date REQUIRED)
+    else()
+        set(EXTERNAL_DATE_NAME date)
+        set(EXTERNAL_DATE_URL https://github.com/HowardHinnant/date.git)
+        set(EXTERNAL_DATE_TAG v3.0.1)
+        # Fetch Date
+        FetchContent_Declare(
+            ${EXTERNAL_DATE_NAME}
+            GIT_REPOSITORY          ${EXTERNAL_DATE_URL}
+            GIT_TAG                 ${EXTERNAL_DATE_TAG}
+        )
 
-    # Find the date package
-    FetchContent_MakeAvailable(${EXTERNAL_DATE_NAME})
+        # Find the date package
+        FetchContent_MakeAvailable(${EXTERNAL_DATE_NAME})
+    endif()
 endif()
 
 
