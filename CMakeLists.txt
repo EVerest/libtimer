@@ -9,7 +9,7 @@ project(everest-timer
 
 if (USE_FIND_PACKAGE)
     find_package(everest-cmake 0.1 REQUIRED
-        PATHS ../everest-cmake
+        PATHS ../everest-cmake)
 else()
     include(FetchContent)
 
