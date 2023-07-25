@@ -45,6 +45,10 @@ else()
         set(EXTERNAL_DATE_NAME date)
         set(EXTERNAL_DATE_URL https://github.com/HowardHinnant/date.git)
         set(EXTERNAL_DATE_TAG v3.0.1)
+        set(BUILD_TZ_LIB ON CACHE INTERNAL "")
+        set(HAS_REMOTE_API 0 CACHE INTERNAL "")
+        set(USE_AUTOLOAD 0 CACHE INTERNAL "")
+        set(USE_SYSTEM_TZ_DB ON CACHE INTERNAL "")
         # Fetch Date
         FetchContent_Declare(
             ${EXTERNAL_DATE_NAME}
