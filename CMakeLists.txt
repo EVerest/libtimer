@@ -83,3 +83,8 @@ if(CMAKE_RUN_CLANG_TIDY)
     -header-filter='.*'
     -checks=${CLANG_TIDY_CHECKS})
 endif()
+
+if(BUILD_TESTING)
+    include(CTest)
+    add_subdirectory(tests)
+endif()
