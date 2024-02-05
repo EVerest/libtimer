@@ -13,19 +13,36 @@
 #include <thread>
 
 namespace Everest {
+
+template <typename Type, bool Exists> struct OptionalTimerMember {
+    Type data;
+};
+
+template <typename Type> struct OptionalTimerMember<Type, false> {};
+
+template <template<typename> typename Guard, typename Mutex, bool Enabled> struct OptionalGuard {
+    OptionalGuard(OptionalTimerMember<Mutex, Enabled> &in_mutex) {
+        if constexpr (Enabled) {
+            guard.data = std::move(Guard<Mutex>(in_mutex.data));
+        }
+    }
+
+    OptionalTimerMember<Guard<Mutex>, Enabled> guard;
+};
+
 // template <typename TimerClock = date::steady_clock> class Timer {
-template <typename TimerClock = date::utc_clock> class Timer {
+template <typename TimerClock = date::utc_clock, bool ThreadSafe = false> class Timer {
 private:
     boost::asio::basic_waitable_timer<TimerClock>* timer = nullptr;
     std::function<void()> callback;
     std::function<void(const boost::system::error_code& e)> callback_wrapper;
-    std::chrono::nanoseconds interval_nanoseconds;
-    std::condition_variable cv;
-    std::mutex wait_mutex;
-    bool running = false;
+    std::chrono::nanoseconds interval_nanoseconds;        
     boost::asio::io_context io_context;
     boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work;
     std::thread* timer_thread = nullptr;
+    bool running = false;
+
+    OptionalTimerMember<std::mutex, ThreadSafe> mutex;
 
 public:
     /// This timer will initialize a boost::asio::io_context
@@ -68,9 +85,14 @@ public:
     /// Executes the given callback at the given timepoint
     template <class Clock, class Duration = typename Clock::duration>
     void at(const std::function<void()>& callback, const std::chrono::time_point<Clock, Duration>& time_point) {
-        this->stop();
-
-        this->callback = callback;
+        if constexpr(ThreadSafe) {
+            OptionalGuard<std::unique_lock, std::mutex, ThreadSafe> optional_guard(this->mutex);
+            this->stop();
+            this->callback = callback;
+        } else {
+            this->stop();
+            this->callback = callback;
+        }
 
         this->at(time_point);
     }
@@ -78,6 +100,8 @@ public:
     /// Executes the at the given timepoint
     template <class Clock, class Duration = typename Clock::duration>
     void at(const std::chrono::time_point<Clock, Duration>& time_point) {
+        OptionalGuard<std::unique_lock, std::mutex, ThreadSafe> optional_guard(this->mutex);
+
         this->stop();
 
         if (this->callback == nullptr) {
@@ -85,6 +109,8 @@ public:
         }
 
         if (this->timer != nullptr) {
+            running = true;
+
             // use asio timer
             this->timer->expires_at(time_point);
             this->timer->async_wait([this](const boost::system::error_code& e) {
@@ -93,6 +119,7 @@ public:
                 }
 
                 this->callback();
+                running = false;
             });
         }
     }
@@ -100,15 +127,24 @@ public:
     /// Execute the given callback peridically from now in the given interval
     template <class Rep, class Period>
     void interval(const std::function<void()>& callback, const std::chrono::duration<Rep, Period>& interval) {
-        this->stop();
+        if constexpr(ThreadSafe) {
+            OptionalGuard<std::unique_lock, std::mutex, ThreadSafe> optional_guard(this->mutex);
 
-        this->callback = callback;
+            this->stop();
+            this->callback = callback;
+        } else {
+            this->stop();
+            this->callback = callback;
+        }
+        
 
         this->interval(interval);
     }
 
     /// Execute peridically from now in the given interval
     template <class Rep, class Period> void interval(const std::chrono::duration<Rep, Period>& interval) {
+        OptionalGuard<std::unique_lock, std::mutex, ThreadSafe> optional_guard(this->mutex);
+
         this->stop();
         this->interval_nanoseconds = interval;
         if (interval_nanoseconds == std::chrono::nanoseconds(0)) {
@@ -120,9 +156,12 @@ public:
         }
 
         if (this->timer != nullptr) {
+            running = true;
+
             // use asio timer
             this->callback_wrapper = [this](const boost::system::error_code& e) {
                 if (e) {
+                    running = false;
                     return;
                 }
 
@@ -140,15 +179,21 @@ public:
     // Execute the given callback once after the given interval
     template <class Rep, class Period>
     void timeout(const std::function<void()>& callback, const std::chrono::duration<Rep, Period>& interval) {
-        this->stop();
-
-        this->callback = callback;
+        if constexpr (ThreadSafe) {
+            OptionalGuard<std::unique_lock, std::mutex, ThreadSafe> optional_guard(this->mutex);
+            this->stop();
+            this->callback = callback;
+        } else {
+            this->stop();
+            this->callback = callback;
+        }
 
         this->timeout(interval);
     }
 
     // Execute the given callback once after the given interval
     template <class Rep, class Period> void timeout(const std::chrono::duration<Rep, Period>& interval) {
+        OptionalGuard<std::unique_lock, std::mutex, ThreadSafe> optional_guard(this->mutex);
         this->stop();
 
         if (this->callback == nullptr) {
@@ -156,24 +201,36 @@ public:
         }
 
         if (this->timer != nullptr) {
+            running = true;
+
             // use asio timer
             this->timer->expires_from_now(interval);
             this->timer->async_wait([this](const boost::system::error_code& e) {
                 if (e) {
+                    running = false;
                     return;
                 }
 
                 this->callback();
+                running = false;
             });
         }
     }
 
     /// Stop timer from excuting its callback
     void stop() {
+        OptionalGuard<std::unique_lock, std::mutex, ThreadSafe> optional_guard(this->mutex);
+
         if (this->timer != nullptr) {
             // asio based timer
             this->timer->cancel();
         }
+
+        running = false;
+    }
+
+    bool is_running() {
+        return running;
     }
 };
 
