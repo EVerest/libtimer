@@ -10,6 +10,8 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <stdexcept>
 #include <thread>
 
 namespace Everest {
@@ -30,6 +32,49 @@ template <template <typename> typename Guard, typename Mutex, bool Enabled> stru
     OptionalTimerMember<Guard<Mutex>, Enabled> guard;
 };
 
+class TimerExecutionContext {
+public:
+    boost::asio::io_context io_context;
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work;
+    std::unique_ptr<std::thread> timer_thread = nullptr;
+    std::thread::id timer_thread_id;
+
+public:
+    TimerExecutionContext() : work(boost::asio::make_work_guard(this->io_context)) {
+        this->timer_thread = std::make_unique<std::thread>([this]() {
+            timer_thread_id = std::this_thread::get_id();
+            this->io_context.run();
+        });
+    }
+
+    ~TimerExecutionContext() noexcept(false) {
+        if (std::this_thread::get_id() == timer_thread_id) {
+            throw std::runtime_error("Trying to destruct TimerExecContext from the same thread it was created!");
+        }
+
+        this->io_context.stop();
+        this->timer_thread->join();
+    }
+
+    boost::asio::io_context& get_io_context() {
+        return this->io_context;
+    }
+
+public:
+    static inline std::shared_ptr<TimerExecutionContext> get_unique_context() {
+        return std::make_shared<TimerExecutionContext>();
+    }
+
+    static std::shared_ptr<TimerExecutionContext> get_shared_context() {
+        static std::shared_ptr<TimerExecutionContext> context;
+        static std::once_flag context_flags;
+
+        std::call_once(context_flags, []() { context = std::make_shared<TimerExecutionContext>(); });
+
+        return context;
+    }
+};
+
 // template <typename TimerClock = date::steady_clock> class Timer {
 template <typename TimerClock = date::utc_clock, bool ThreadSafe = false, bool SharedContext = false> class Timer {
 private:
@@ -39,44 +84,46 @@ private:
     std::chrono::nanoseconds interval_nanoseconds;
     bool running = false;
 
-    boost::asio::io_context io_context;
-    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work;
-    std::unique_ptr<std::thread> timer_thread = nullptr;
+    std::shared_ptr<TimerExecutionContext> context;
 
     OptionalTimerMember<std::mutex, ThreadSafe> mutex;
 
 public:
     /// This timer will initialize a boost::asio::io_context
-    explicit Timer() : work(boost::asio::make_work_guard(this->io_context)) {
-        this->timer = std::make_unique<boost::asio::basic_waitable_timer<TimerClock>>(this->io_context);
-        this->timer_thread = std::make_unique<std::thread>([this]() { this->io_context.run(); });
+    explicit Timer() {
+        if constexpr (SharedContext) {
+            context = TimerExecutionContext::get_shared_context();
+        } else {
+            context = TimerExecutionContext::get_unique_context();
+        }
+
+        this->timer = std::make_unique<boost::asio::basic_waitable_timer<TimerClock>>(context->get_io_context());
     }
 
-    explicit Timer(const std::function<void()>& callback) : work(boost::asio::make_work_guard(this->io_context)) {
-        this->timer = std::make_unique<boost::asio::basic_waitable_timer<TimerClock>>(this->io_context);
-        this->timer_thread = std::make_unique<std::thread>([this]() { this->io_context.run(); });
+    explicit Timer(const std::function<void()>& callback) {
+        if constexpr (SharedContext) {
+            context = TimerExecutionContext::get_shared_context();
+        } else {
+            context = TimerExecutionContext::get_unique_context();
+        }
+
         this->callback = callback;
+        this->timer = std::make_unique<boost::asio::basic_waitable_timer<TimerClock>>(context->get_io_context());
     }
 
-    explicit Timer(boost::asio::io_context* io_context) : work(boost::asio::make_work_guard(*io_context)) {
+    explicit Timer(boost::asio::io_context* io_context) {
         this->timer = std::make_unique<boost::asio::basic_waitable_timer<TimerClock>>(*io_context);
     }
 
-    explicit Timer(boost::asio::io_context* io_context, const std::function<void()>& callback) :
-        work(boost::asio::make_work_guard(*io_context)) {
-        this->timer = std::make_unique<boost::asio::basic_waitable_timer<TimerClock>>(*io_context);
+    explicit Timer(boost::asio::io_context* io_context, const std::function<void()>& callback) {
         this->callback = callback;
+        this->timer = std::make_unique<boost::asio::basic_waitable_timer<TimerClock>>(*io_context);
     }
 
     ~Timer() {
         if (this->timer) {
             // stop asio timer
             this->timer->cancel();
-
-            if (this->timer_thread) {
-                this->io_context.stop();
-                this->timer_thread->join();
-            }
         }
     }
 
