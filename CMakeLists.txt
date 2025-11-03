@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.11)
 
 project(everest-timer
-    VERSION 0.1.2
+    VERSION 0.1.3
     DESCRIPTION "EVerest timer library"
     LANGUAGES CXX C
 )
@@ -23,8 +23,20 @@ if((${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME} OR ${PROJECT_NAME}_BUILD_TEST
     add_subdirectory(tests)
 endif()
 
+# this policy allows us to continue using the removed FindBoost module for now
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 OLD)
+endif()
+
 # dependencies
-find_package(Boost COMPONENTS system REQUIRED)
+find_package(Boost)
+if(Boost_VERSION_STRING VERSION_LESS "1.69.0")
+    find_package(Boost
+        COMPONENTS
+            system
+        REQUIRED
+    )
+endif()
 
 if (NOT DISABLE_EDM)
     evc_setup_edm()

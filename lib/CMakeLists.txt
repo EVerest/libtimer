@@ -7,8 +7,12 @@ target_include_directories(timer
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
+if(Boost_VERSION_STRING VERSION_LESS "1.69.0")
+    set(EVEREST_LIBTIMER_BOOST_SYSTEM_LINK_LIBRARY Boost::system)
+endif()
+
 target_link_libraries(timer
     INTERFACE
-        Boost::system
+        ${EVEREST_LIBTIMER_BOOST_SYSTEM_LINK_LIBRARY}
         date::date-tz
 )
